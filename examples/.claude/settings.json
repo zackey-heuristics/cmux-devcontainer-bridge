@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -c --arg ws \"${CMUX_WORKSPACE_ID:-}\" --arg sf \"${CMUX_SURFACE_ID:-}\" '{title:(.hook_event_name // \"Claude Code\"), body:(.message // \"\"), kind:(.hook_event_name // \"\"), workspace_id:$ws, surface_id:$sf, source:\"claude-code\"}' | curl -sS -m 3 -o /dev/null -X POST http://host.docker.internal:8765/notify -H 'Content-Type: application/json' --data-binary @- || true",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -c --arg ws \"${CMUX_WORKSPACE_ID:-}\" --arg sf \"${CMUX_SURFACE_ID:-}\" '{title:(.hook_event_name // \"Claude Code\"), body:(.message // \"\"), kind:(.hook_event_name // \"\"), workspace_id:$ws, surface_id:$sf, source:\"claude-code\"}' | curl -sS -m 3 -o /dev/null -X POST http://host.docker.internal:8765/notify -H 'Content-Type: application/json' --data-binary @- || true",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -c --arg ws \"${CMUX_WORKSPACE_ID:-}\" --arg sf \"${CMUX_SURFACE_ID:-}\" '{title:(.hook_event_name // \"Claude Code\"), body:(.message // \"\"), kind:(.hook_event_name // \"\"), workspace_id:$ws, surface_id:$sf, source:\"claude-code\"}' | curl -sS -m 3 -o /dev/null -X POST http://host.docker.internal:8765/notify -H 'Content-Type: application/json' --data-binary @- || true",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

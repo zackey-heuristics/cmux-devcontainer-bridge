@@ -1,0 +1,24 @@
+services:
+  devcontainer-router:
+    # Enable dynamic resolution of host.docker.internal inside the router
+    # (avoids hardcoding the host IP address).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Hook to allow only 127.0.0.1:8765/tcp via FORWARD.
+    volumes:
+      - ./router-allow-bridge.sh:/entrypoint.local.sh:ro
+
+  devcontainer-sandbox:
+    # Bind mount the .claude and .codex directories from the host to the sandbox.
+    volumes:
+      - type: bind
+        source: ${HOME}/.claude
+        target: /home/vscode/.claude
+      - type: bind
+        source: ${HOME}/.codex
+        target: /home/vscode/.codex
+    
+    # Allow host.docker.internal to be resolved inside the sandbox as well.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  

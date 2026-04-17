@@ -1,0 +1,44 @@
+# golangci-lint configuration for cmux-notify-bridge.
+# Run locally with `make lint` (after `make tools` has installed the binaries).
+# CI runs the same linters via .github/workflows/ci.yml.
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.22"
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked errors
+    - govet         # suspicious constructs
+    - ineffassign   # ineffectual assignments
+    - staticcheck   # go/ref static analysis (includes gosimple + stylecheck)
+    - unused        # unused code
+    - revive        # replaces golint; style warnings
+    - gocritic      # extra opinionated checks
+    - misspell      # English spelling
+  settings:
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+          disabled: false
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+  settings:
+    gofumpt:
+      module-path: github.com/zackey-heuristics/cmux-devcontainer-bridge
+      extra-rules: true
