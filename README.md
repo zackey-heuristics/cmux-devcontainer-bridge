@@ -19,6 +19,71 @@ call `cmux` directly. By running this bridge on the host and pointing the hook
 at `host.docker.internal:8765`, you get native macOS notifications without
 any extra dependencies inside the container.
 
+## Quickstart
+
+Drop-in setup for the common case: macOS host running `cmux`, a cmux
+devcontainer, and Claude Code running inside it. Ready-made example files are
+in [`examples/`](./examples).
+
+1. **Install the bridge on the host.** Download the latest macOS binary from
+   [Releases](https://github.com/zackey-heuristics/cmux-devcontainer-bridge/releases):
+
+   ```bash
+   # Pick your arch: darwin-arm64 (Apple Silicon) or darwin-amd64 (Intel)
+   ARCH=darwin-arm64
+   VERSION=v0.1.0   # replace with the latest tag from the Releases page
+
+   curl -fsSL -o /tmp/cmux-notify-bridge.tar.gz \
+     "https://github.com/zackey-heuristics/cmux-devcontainer-bridge/releases/download/${VERSION}/cmux-notify-bridge-${ARCH}.tar.gz"
+   tar -xzf /tmp/cmux-notify-bridge.tar.gz -C /tmp
+   sudo install /tmp/cmux-notify-bridge-${ARCH} /usr/local/bin/cmux-notify-bridge
+
+   cmux-notify-bridge &
+   curl -s http://127.0.0.1:8765/healthz   # → {"ok":true}
+   ```
+
+   For login-time autostart, see [Running at login with launchd](#running-at-login-with-launchd).
+   To build from source instead, see [Build](#build).
+
+2. **Install the Claude Code hooks.** Copy
+   [`examples/.claude/settings.json`](./examples/.claude/settings.json) to
+   `~/.claude/settings.json` (user-global) or to a project's
+   `.claude/settings.json`. It registers `Notification`, `Stop`, and
+   `SubagentStop` hooks that POST to `http://host.docker.internal:8765/notify`,
+   tagging each payload with `$CMUX_WORKSPACE_ID` and `$CMUX_SURFACE_ID`.
+
+3. **Drop the devcontainer overlay into the cmux devcontainer project.** Copy
+   [`examples/.devcontainer/docker-compose.local.yml`](./examples/.devcontainer/docker-compose.local.yml)
+   to `.devcontainer/docker-compose.local.yml` in the cmux devcontainer
+   project. It:
+
+   - bind-mounts `~/.claude` into the sandbox so the hooks from step 2 are
+     visible inside the container,
+   - adds `host.docker.internal:host-gateway` to the router and sandbox
+     services so the sandbox can reach the bridge,
+   - mounts `router-allow-bridge.sh` so the router opens only
+     `127.0.0.1:8765/tcp`.
+
+4. **Bring up the devcontainer.**
+
+   ```bash
+   devcontainer up --workspace-folder .
+   ```
+
+5. **Exec into the devcontainer with CMUX_\* forwarded.**
+
+   ```bash
+   ./scripts/dc-exec.sh bash
+   ```
+
+   This uses `devcontainer exec --remote-env` to forward `CMUX_WORKSPACE_ID`
+   and `CMUX_SURFACE_ID` from the host so notifications carry the right
+   workspace/surface tags.
+
+6. **Use Claude Code inside the container.** Notification / Stop / SubagentStop
+   events forward through the bridge and surface as cmux notifications on the
+   host.
+
 ## Build
 
 ```bash
@@ -117,78 +182,22 @@ curl -s http://127.0.0.1:8765/healthz
 # {"ok":true}
 ```
 
-## Claude Code Stop-hook example
+## Claude Code hook configuration
 
-Add the following to your Claude Code settings as a stop hook. It fires when
-a Claude Code session ends and sends a notification through the bridge.
+[`examples/.claude/settings.json`](./examples/.claude/settings.json) provides a
+ready-made set of `Notification`, `Stop`, and `SubagentStop` hooks. Drop it
+into `~/.claude/settings.json` (user-global) or a project's
+`.claude/settings.json`. For each event the hook:
 
-**`.claude/settings.json`**
+- builds the JSON payload with `jq` from the hook input (`hook_event_name`,
+  `message`) plus `$CMUX_WORKSPACE_ID` / `$CMUX_SURFACE_ID`,
+- POSTs it to `http://host.docker.internal:8765/notify`,
+- runs `async: true` with `curl --max-time 3` and a trailing `|| true`, so the
+  bridge being down never blocks or errors out a Claude Code session.
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /path/to/notify-hook.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-**`notify-hook.sh`** (bash + python variant, adapted from issue #1):
-
-```bash
-#!/usr/bin/env bash
-# notify-hook.sh — Claude Code Stop hook that forwards to cmux-notify-bridge.
-# Works both inside a devcontainer (via host.docker.internal) and on the host.
-
-set -euo pipefail
-
-BRIDGE_URL="${CMUX_BRIDGE_URL:-http://host.docker.internal:8765}"
-TOKEN="${CMUX_BRIDGE_TOKEN:-}"
-
-# Claude Code pipes the session JSON on stdin. Extract the last assistant
-# message and trim it to 180 chars for the notification body.
-PAYLOAD_JSON="$(cat)"
-BODY="$(printf '%s' "$PAYLOAD_JSON" | python3 -c '
-import json, re, sys
-obj = json.load(sys.stdin)
-msg = obj.get("last_assistant_message") or "Claude finished"
-msg = re.sub(r"\s+", " ", msg).strip()
-print(msg[:180] + ("..." if len(msg) > 180 else ""))
-')"
-
-PAYLOAD=$(python3 -c "
-import json, os, sys
-data = {
-    'title': 'Claude Code',
-    'body': os.environ.get('BODY', 'Session stopped.'),
-    'workspace_id': os.environ.get('CMUX_WORKSPACE_ID', ''),
-    'surface_id': os.environ.get('CMUX_SURFACE_ID', ''),
-    'source': 'claude-code',
-    'kind': 'stop',
-}
-print(json.dumps(data))
-" BODY="$BODY")
-
-# Build the curl argv as an array so that quoting and splitting are safe.
-CURL_ARGS=(-s --max-time 5 -X POST "$BRIDGE_URL/notify" -H "Content-Type: application/json")
-if [ -n "$TOKEN" ]; then
-  CURL_ARGS+=(-H "Authorization: Bearer $TOKEN")
-fi
-
-curl "${CURL_ARGS[@]}" -d "$PAYLOAD" || true
-```
-
-Set `CMUX_BRIDGE_URL` if the bridge is on a non-default address.
-Set `CMUX_BRIDGE_TOKEN` if `--token` is configured.
+The hook depends on `jq` and `curl` being available inside the devcontainer.
+If you run the bridge with `--token`, add an `Authorization: Bearer <token>`
+header to the `curl` invocation.
 
 ## scripts/dc-exec.sh
 
@@ -257,9 +266,9 @@ and load it with `launchctl`:
 ```
 
 ```bash
-# Install the binary first:
-make build
-sudo cp bin/cmux-notify-bridge /usr/local/bin/
+# Install the binary first (see the Quickstart for the Releases tarball,
+# or build from source):
+# make build && sudo cp bin/cmux-notify-bridge /usr/local/bin/
 
 # Load the agent:
 launchctl load ~/Library/LaunchAgents/com.zackey-heuristics.cmux-notify-bridge.plist
