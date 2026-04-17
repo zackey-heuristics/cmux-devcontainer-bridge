@@ -3,7 +3,9 @@
 #
 # 1. Builds the bridge binary.
 # 2. Points it at a fake cmux shim that captures its argv.
-# 3. Starts the bridge on a random loopback port.
+# 3. Starts the bridge on a fixed loopback port (127.0.0.1:18765, chosen to
+#    avoid the default 127.0.0.1:8765 so a locally running bridge does not
+#    collide with the smoke test).
 # 4. POSTs /notify and /healthz via curl.
 # 5. Verifies the HTTP response and the captured argv.
 #

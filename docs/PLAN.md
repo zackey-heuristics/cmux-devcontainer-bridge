@@ -19,7 +19,12 @@ rules.
 | `Makefile` | `build`, `test`, `vet`, `clean` targets |
 | `README.md` | overwrites the stub — purpose, build, run, curl, hook example, launchd |
 
-No other files. `.devcontainer/` stays untouched.
+Deliverables beyond the original table that landed on this branch during
+review: `.github/workflows/{ci,release}.yml`, `.golangci.yml`, `scripts/e2e.sh`,
+`internal/server/e2e_test.go`, `internal/server/testdata/fake-cmux.sh`,
+`examples/.claude/settings.json`, `examples/.devcontainer/docker-compose.local.yml`,
+and `AGENTS.md` / `CLAUDE.md` orchestration docs. `.devcontainer/` stays
+untouched.
 
 ## Package shapes
 

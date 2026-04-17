@@ -96,6 +96,22 @@ func TestMissingContentType(t *testing.T) {
 	}
 }
 
+// TestContentTypeNeighbouringTokens verifies that media types that merely
+// start with "application/json" (e.g., "application/jsonx") are rejected.
+func TestContentTypeNeighbouringTokens(t *testing.T) {
+	h := newHandler("", &fakeNotifier{})
+	for _, ct := range []string{
+		"application/jsonx",
+		"application/json-seq",
+		"text/plain",
+	} {
+		w := post(h, "/notify", ct, `{"title":"Hi"}`, nil)
+		if w.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("Content-Type %q: status = %d, want 415; body: %s", ct, w.Code, w.Body.String())
+		}
+	}
+}
+
 // TestWrongMethod verifies that GET /notify returns 405.
 func TestWrongMethod(t *testing.T) {
 	h := newHandler("", &fakeNotifier{})

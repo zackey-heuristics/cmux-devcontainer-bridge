@@ -17,4 +17,5 @@ devcontainer exec \
   --workspace-folder . \
   --remote-env CMUX_WORKSPACE_ID="${CMUX_WORKSPACE_ID:-}" \
   --remote-env CMUX_SURFACE_ID="${CMUX_SURFACE_ID:-}" \
+  -- \
   "$@"

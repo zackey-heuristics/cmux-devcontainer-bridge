@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -85,10 +86,12 @@ func handleNotify(w http.ResponseWriter, r *http.Request, cfg Config) int {
 		}
 	}
 
-	// Content-Type guard. RFC 7231 §3.1.1.1 — media type names are case
-	// insensitive, so fold to lower before matching.
-	ct := strings.ToLower(r.Header.Get("Content-Type"))
-	if !strings.HasPrefix(ct, "application/json") {
+	// Content-Type guard. Parse via mime.ParseMediaType so parameters like
+	// "; charset=utf-8" are accepted but neighbouring tokens like
+	// "application/jsonx" are rejected. mime.ParseMediaType already lowercases
+	// the base media type per RFC 7231 §3.1.1.1.
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
 		writeJSON(w, http.StatusUnsupportedMediaType, jsonBody{OK: false, Error: "content-type must be application/json"})
 		return http.StatusUnsupportedMediaType
 	}
@@ -177,7 +180,11 @@ type jsonBody struct {
 func writeJSON(w http.ResponseWriter, status int, body jsonBody) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		// Usually a client disconnect — nothing we can do, but record it so
+		// real serialization bugs aren't silently swallowed.
+		slog.Debug("writeJSON encode failed", "status", status, "err", sanitizeError(err))
+	}
 }
 
 // trimCap trims whitespace, strips CR/LF (to prevent log and argv newline
